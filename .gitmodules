@@ -1,0 +1,3 @@
+[submodule "code/pymclevel"]
+	path = code/pymclevel
+	url = https://github.com/mcedit/pymclevel.git
