@@ -10,19 +10,22 @@ from vectors import Vector
 
 # -- Constants --
 vInverse = (-1,-1,-1)
-pXIncreasing = faceDirections[FaceXIncreasing][1]
-pXDecreasing = faceDirections[FaceXDecreasing][1]
-pYIncreasing = faceDirections[FaceYIncreasing][1]
-pYDecreasing = faceDirections[FaceYDecreasing][1]
-pZIncreasing = faceDirections[FaceZIncreasing][1]
-pZDecreasing = faceDirections[FaceZDecreasing][1]
+pXIncreasing = Vector(faceDirections[FaceXIncreasing][1])
+pXDecreasing = Vector(faceDirections[FaceXDecreasing][1])
+pYIncreasing = Vector(faceDirections[FaceYIncreasing][1])
+pYDecreasing = Vector(faceDirections[FaceYDecreasing][1])
+pZIncreasing = Vector(faceDirections[FaceZIncreasing][1])
+pZDecreasing = Vector(faceDirections[FaceZDecreasing][1])
+pFaceDirections = ( pXIncreasing, pXDecreasing, pYIncreasing, pYDecreasing, pZIncreasing, pZDecreasing )
+ # mapping of block ids to costs
+minetime = FreqDict()
 
 # -- Classes --
 class FreqDict(dict):
     def __missing__(self,key):
         return 0
 
-# -- Functions --
+# -- Chunk Functions --
 
 def getChunkFromVector(world,vec):
     return world.getChunk(vec.x >> 4, vec.z >> 4)
@@ -34,25 +37,42 @@ def getSubCoords(vec):
     return Vector(vec.x & 15, vec.y, vec.z & 15)
 
 def getBlock(world,vec):
-    return getChunkFromVector(world,vec).Blocks[getSubCoords(vec)]
-    
-def constructLookList(pDiff, pSize):
-    ret = set()
+    ch = getChunkFromVector(world,vec)
+    ind = getSubCoords(vec)
+    return ch.Blocks[ind] + ch.Add[ind]
+
+def setBlock(world,vec,bId):
+    ch = getChunkFromVector(world,vec)
+    ind = getSubCoords(vec)
+    ch.Blocks[ind] = bId & 255
+    ch.Add[ind] = (bId >> 8) & 15
+
+# -- Main Functions --
+
+# Construct a Vector set of all the offsets that you need to look at and mine out each step of the shaft.
+def constructLookLists(pDiff, pSize):
+    look = set()
+    shaft = set()
     for dx in range(pSize.x):
         for dy in range(pSize.y):
             for dz in range(pSize.z):
+                shaft.add(Vector(dx,dy,dz))
                 for dire in faceDirections:
-                    ret.add(Vector(dx,dy,dz) + dire[1])
-    # Remove squares from consideration that are on the axis of pDiff
+                    look.add(Vector(dx,dy,dz) + dire[1])
+    # Remove from look those that are on the axis of the mineshaft (pDiff)
     for i in range(3):
         if pDiff[i]!=0:
-            ret = [vec if vec[i]==0 else None for vec in ret]
-    ret = set(ret)
-    ret.remove(None)
-    return ret
+            look = [vec if vec[i]==0 else None for vec in look]
+    # Reconvert to set, done after looped list comprehensions
+    look = set(look)
+    # Remove placeholder None object
+    look.remove(None)
+    # Remove shaft blocks
+    look -= shaft
+    return look, shaft
 
-def mineShaft(world, pStart, pDiff, pShaftSize, pStop):
-    lpLook = constructLookList(pDiff, pShaftSize)
+def mineShaft(final world, pStart, pDiff, pShaftSize, pStop):
+    lpLook, lpShaft = constructLookLists(pDiff, pShaftSize)
     pCurrent = Vector(pStart.x, pStart.y, pStart.z)
     
     # Dynamically reduced while-loop condition
@@ -71,14 +91,52 @@ def mineShaft(world, pStart, pDiff, pShaftSize, pStop):
         check_func = check_1x
     if pDiff == pZIncreasing or pDiff == pZDecreasing:
         check_func = check_1z
+    blocks_seen = FreqDict()
+    blocks_mined = FreqDict()
+    time_taken = 0
+    
+    def mineBlock(pBlock):
+        bid = getBlock(world, pBlock)
+        if bid == 0: return
+        blocks_mined[bid]++
+        time_taken += minetime[bid]
+        setBlock(world, pBlock, 0)
+        # Make sure that sand & gravel are done
+        if bid in blocksFalling:
+            mineBlock(pBlock + (0,1,0))
+    
+    def mineVeins(pBlock):
+        bId = getBlock(world, pBlock)
+        neighbors = []
+        for pD in pFaceDirections:
+            pTmp = pBlock + pD
+            bId2 = getBlock(world, pTmp)
+            if bId2 in blocksValuable:
+                neighbors.append(pTmp)
+        mineBlock(pBlock)
+        # Tail recurse
+        for pBlock2 in neighbors:
+            mineVeins(pBlock2)
+        return
     
     print("Starting mining: %s -> %s" % (str(pStart), str(pStop)))
     print("Chunk pos %s,%s -> %s,%s" % (pStart.x >> 4, pStart.z >> 4, pStop.x >> 4, pStop.z >> 4))
-    blocks_seen = FreqDict()
     while check_func():
         pCurrent += pDiff
+        # Dig the shaft
+        for pDelta in lpShaft:
+            mineBlock(pCurrent + pDelta)
+        # Check the sides, take action if necessary
         for pDelta in lpLook:
-            blocks_seen[getBlock(world,pCurrent + pDelta)] += 1
+            pBlock = pCurrent + pDelta
+            bId = getBlock(world,pBlock)
+            blocks_seen[bId]++
+            if bId in blocksValuable:
+                mineVeins(pBlock)
+            if bId in blocksLiquid:
+                coverLiquid(pBlock)
+            if bId in blocksSpecial:
+                handleSpecial(world,bId,pBlock)
     print(pCurrent)
     print(blocks_seen)
         
