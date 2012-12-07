@@ -10,21 +10,22 @@ from vectors import Vector
 
 # -- Constants --
 vInverse = (-1,-1,-1)
-pXIncreasing = Vector(faceDirections[FaceXIncreasing][1])
-pXDecreasing = Vector(faceDirections[FaceXDecreasing][1])
-pYIncreasing = Vector(faceDirections[FaceYIncreasing][1])
-pYDecreasing = Vector(faceDirections[FaceYDecreasing][1])
-pZIncreasing = Vector(faceDirections[FaceZIncreasing][1])
-pZDecreasing = Vector(faceDirections[FaceZDecreasing][1])
+pXIncreasing = faceDirections[FaceXIncreasing][1]
+pXDecreasing = faceDirections[FaceXDecreasing][1]
+pYIncreasing = faceDirections[FaceYIncreasing][1]
+pYDecreasing = faceDirections[FaceYDecreasing][1]
+pZIncreasing = faceDirections[FaceZIncreasing][1]
+pZDecreasing = faceDirections[FaceZDecreasing][1]
 pFaceDirections = ( pXIncreasing, pXDecreasing, pYIncreasing, pYDecreasing, pZIncreasing, pZDecreasing )
- # mapping of block ids to costs
-minetime = FreqDict()
+minetime = { 0:0, 1:
 
 # -- Classes --
 class FreqDict(dict):
     def __missing__(self,key):
         return 0
 
+ # mapping of block ids to costs
+minetime = FreqDict()
 # -- Chunk Functions --
 
 def getChunkFromVector(world,vec):
@@ -39,7 +40,7 @@ def getSubCoords(vec):
 def getBlock(world,vec):
     ch = getChunkFromVector(world,vec)
     ind = getSubCoords(vec)
-    return ch.Blocks[ind] + ch.Add[ind]
+    return ch.Blocks[ind]# + ch.Add[ind]
 
 def setBlock(world,vec,bId):
     ch = getChunkFromVector(world,vec)
@@ -71,7 +72,7 @@ def constructLookLists(pDiff, pSize):
     look -= shaft
     return look, shaft
 
-def mineShaft(final world, pStart, pDiff, pShaftSize, pStop):
+def mineShaft(world, pStart, pDiff, pShaftSize, pStop):
     lpLook, lpShaft = constructLookLists(pDiff, pShaftSize)
     pCurrent = Vector(pStart.x, pStart.y, pStart.z)
     
@@ -98,7 +99,7 @@ def mineShaft(final world, pStart, pDiff, pShaftSize, pStop):
     def mineBlock(pBlock):
         bid = getBlock(world, pBlock)
         if bid == 0: return
-        blocks_mined[bid]++
+        blocks_mined[bid] += 1
         time_taken += minetime[bid]
         setBlock(world, pBlock, 0)
         # Make sure that sand & gravel are done
@@ -130,7 +131,7 @@ def mineShaft(final world, pStart, pDiff, pShaftSize, pStop):
         for pDelta in lpLook:
             pBlock = pCurrent + pDelta
             bId = getBlock(world,pBlock)
-            blocks_seen[bId]++
+            blocks_seen[bId] += 1
             if bId in blocksValuable:
                 mineVeins(pBlock)
             if bId in blocksLiquid:
