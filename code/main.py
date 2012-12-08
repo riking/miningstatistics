@@ -17,7 +17,6 @@ pYDecreasing = faceDirections[FaceYDecreasing][1]
 pZIncreasing = faceDirections[FaceZIncreasing][1]
 pZDecreasing = faceDirections[FaceZDecreasing][1]
 pFaceDirections = ( pXIncreasing, pXDecreasing, pYIncreasing, pYDecreasing, pZIncreasing, pZDecreasing )
-minetime = { 0:0, 1:
 
 # -- Classes --
 class FreqDict(dict):
@@ -25,7 +24,11 @@ class FreqDict(dict):
         return 0
 
  # mapping of block ids to costs
-minetime = FreqDict()
+minetime = FreqDict({ 0:0, 1:1, 7:10000000})
+blocksFalling = [12, 13]
+blocksValuable = [14, 15, 16, 21, 22, 41, 42, 56, 57, 73, 74, 89, 129, 133, ]
+blocksLiquid = [8, 9, 10, 11]
+blocksSpecial = dict()
 # -- Chunk Functions --
 
 def getChunkFromVector(world,vec):
@@ -46,7 +49,7 @@ def setBlock(world,vec,bId):
     ch = getChunkFromVector(world,vec)
     ind = getSubCoords(vec)
     ch.Blocks[ind] = bId & 255
-    ch.Add[ind] = (bId >> 8) & 15
+    #ch.Add[ind] = (bId >> 8) & 15
 
 # -- Main Functions --
 
@@ -73,8 +76,10 @@ def constructLookLists(pDiff, pSize):
     return look, shaft
 
 def mineShaft(world, pStart, pDiff, pShaftSize, pStop):
+    global time_taken
     lpLook, lpShaft = constructLookLists(pDiff, pShaftSize)
     pCurrent = Vector(pStart.x, pStart.y, pStart.z)
+    time_taken = 0
     
     # Dynamically reduced while-loop condition
     def check_1x():
@@ -94,9 +99,9 @@ def mineShaft(world, pStart, pDiff, pShaftSize, pStop):
         check_func = check_1z
     blocks_seen = FreqDict()
     blocks_mined = FreqDict()
-    time_taken = 0
     
     def mineBlock(pBlock):
+        global time_taken
         bid = getBlock(world, pBlock)
         if bid == 0: return
         blocks_mined[bid] += 1
@@ -105,6 +110,7 @@ def mineShaft(world, pStart, pDiff, pShaftSize, pStop):
         # Make sure that sand & gravel are done
         if bid in blocksFalling:
             mineBlock(pBlock + (0,1,0))
+        return
     
     def mineVeins(pBlock):
         bId = getBlock(world, pBlock)
@@ -120,6 +126,16 @@ def mineShaft(world, pStart, pDiff, pShaftSize, pStop):
             mineVeins(pBlock2)
         return
     
+    def coverLiquid(pBlock):
+        global time_taken
+        bId = getBlock(world, pBlock)
+        if bId == 8:
+            setBlock(world, pBlock, 4)
+            time_taken += 1
+        elif bId == 9:
+            setBlock(world, pBlock, 4)
+            time_taken += 2
+            
     print("Starting mining: %s -> %s" % (str(pStart), str(pStop)))
     print("Chunk pos %s,%s -> %s,%s" % (pStart.x >> 4, pStart.z >> 4, pStop.x >> 4, pStop.z >> 4))
     while check_func():
@@ -140,32 +156,25 @@ def mineShaft(world, pStart, pDiff, pShaftSize, pStop):
                 handleSpecial(world,bId,pBlock)
     print(pCurrent)
     print(blocks_seen)
+    print(blocks_mined)
+    print(time_taken)
         
 
 def startTesting(world):
     # TODO: Assign starting based on world bbox
     bounds = world.bounds
-    for cx in range(bounds.mincx-1, bounds.maxcx+1):
-        print(cx)
-        s = ""
-        for cz in range(bounds.mincz-1, bounds.maxcz+1):
-            if world.containsChunk(cx,cz):
-                s += "+"
-            else:
-                s += "."
-        print(s)
     selBounds = bounds.expand(bounds.width // -4, 0, bounds.length // -4)
     pStart = None
     bDir = random.random() < 0.5
     if bDir:
         # Mine along X-Axis
-        pStart = Vector(selBounds.minx, 10, random.randint(selBounds.minz+2, selBounds.maxz-2))
+        pStart = Vector(selBounds.minx, 16, random.randint(selBounds.minz+2, selBounds.maxz-2))
         pStop = Vector(selBounds.maxx, pStart.y, pStart.z)
         print(pStart,pStop)
         mineShaft( world, pStart, pXIncreasing, Vector(1,2,1), pStop)
     else:
         # Mine along Z-Axis
-        pStart = Vector(random.randint(selBounds.minz+2, selBounds.maxz-2), 10, selBounds.minz)
+        pStart = Vector(random.randint(selBounds.minz+2, selBounds.maxz-2), 16, selBounds.minz)
         pStop = Vector(pStart.x, pStart.y, selBounds.maxz)
         print(pStart,pStop)
         mineShaft( world, pStart, pZIncreasing, Vector(1,2,1), pStop)
